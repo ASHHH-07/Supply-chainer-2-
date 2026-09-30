@@ -107,29 +107,63 @@ class RouteRecommender:
                     mode = d["transport_mode"]
                     base_t = d["baseline_time"]
                     base_c = d.get("cost", 0)
-                    
+
+                    # Cargo / priority adjustments
+                    cargo_factor = 1.0
+                    priority_factor = 1.0
+
+                    if cargo_type == "perishable":
+                        # Prefer faster transport for time-sensitive goods.
+                        if mode == "air":
+                            cargo_factor = 0.75
+                        elif mode == "road":
+                            cargo_factor = 0.90
+                        elif mode == "rail":
+                            cargo_factor = 1.05
+                        elif mode == "sea":
+                            cargo_factor = 1.20
+
+                    if priority == "urgent":
+                        # Urgent shipments strongly favor faster modes.
+                        if mode == "air":
+                            priority_factor = 0.70
+                        elif mode == "road":
+                            priority_factor = 0.85
+                        elif mode == "rail":
+                            priority_factor = 1.05
+                        elif mode == "sea":
+                            priority_factor = 1.25
+
                     # Intelligence Factor (Mapped to physical node)
                     v_data = G_p.nodes[v]
                     p_id = v_data.get("physical_id")
-                    
+
                     threat = d.get("base_threat", 0.05)
                     delay = 0
-                    
+
                     if p_id in disruptions:
                         threat = max(threat, disruptions[p_id]["threat"])
                         delay += disruptions[p_id]["delay"]
-                    
+
                     if persona == "FASTEST":
-                        return base_t + delay
+                        return (base_t + delay) * cargo_factor * priority_factor
+
                     elif persona == "SAFEST":
                         risk_penalty = 1.0 + (threat * 12.0)
-                        return (base_t + delay) * risk_penalty
-                    else: # BALANCED (ECONOMIC leaning)
-                        # High cost penalty for transfers and expensive modes
+                        return (base_t + delay) * risk_penalty * cargo_factor * priority_factor
+
+                    else:  # BALANCED
                         time_weight = 0.3
                         cost_weight = 0.5
                         risk_weight = 0.2
-                        return (base_t + delay)*time_weight + (base_c / 150.0)*cost_weight + (threat * 40.0)*risk_weight
+
+                        time_component = (base_t + delay) * cargo_factor * priority_factor
+
+                        return (
+                            time_component * time_weight
+                            + (base_c / 150.0) * cost_weight
+                            + (threat * 40.0) * risk_weight
+                        )
 
                 path = nx.dijkstra_path(G_p, s_vnode, d_vnode, weight=weight_func)
                 

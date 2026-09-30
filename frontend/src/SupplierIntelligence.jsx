@@ -7,13 +7,14 @@ import {
 export default function SupplierIntelligence({ onNavigate }) {
   const [suppliers, setSuppliers] = useState([]);
   const [advice, setAdvice] = useState(null);
-  const [inventory, setInventory] = useState(1000);
-  const [safetyStock, setSafetyStock] = useState(1500);
-  const [forecast, setForecast] = useState(800);
+  const [inventory, setInventory] = useState("1000");
+  const [safetyStock, setSafetyStock] = useState("1500");
+  const [forecast, setForecast] = useState("800");
   const [category, setCategory] = useState('Electronics');
   const [scenario, setScenario] = useState(null);
   const [scenarios, setScenarios] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchScenarios = async () => {
@@ -30,26 +31,74 @@ export default function SupplierIntelligence({ onNavigate }) {
     fetchSourcingData();
   }, [category, scenario, inventory, safetyStock, forecast]);
 
-  const fetchSourcingData = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/suppliers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          category,
-          current_inventory: inventory,
-          safety_stock: safetyStock,
-          demand_forecast: forecast,
-          scenario
-        })
-      });
-      const data = await res.json();
-      setSuppliers(data.suppliers);
-      setAdvice(data.advice);
-    } catch (e) { console.error(e); }
+const fetchSourcingData = async () => {
+  if (
+    inventory === "" ||
+    safetyStock === "" ||
+    forecast === ""
+  ) {
+    return;
+  }
+
+  const currentInventory = Number(inventory);
+  const currentSafetyStock = Number(safetyStock);
+  const currentForecast = Number(forecast);
+
+  if (
+    !Number.isFinite(currentInventory) ||
+    !Number.isFinite(currentSafetyStock) ||
+    !Number.isFinite(currentForecast) ||
+    currentInventory < 0 ||
+    currentSafetyStock < 0 ||
+    currentForecast < 0
+  ) {
+    setError("Inventory, safety stock and forecast must be valid non-negative numbers.");
+    return;
+  }
+
+  setLoading(true);
+  setError(null);
+
+  try {
+    const res = await fetch("/api/suppliers", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        category,
+        current_inventory: currentInventory,
+        safety_stock: currentSafetyStock,
+        demand_forecast: currentForecast,
+        scenario: scenario || null
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("Supplier API error:", data);
+
+      throw new Error(
+        data.detail
+          ? JSON.stringify(data.detail)
+          : `Backend returned HTTP ${res.status}`
+      );
+    }
+
+    setSuppliers(Array.isArray(data.suppliers) ? data.suppliers : []);
+    setAdvice(data.advice || null);
+
+  } catch (e) {
+    console.error("Failed to fetch supplier data:", e);
+
+    setSuppliers([]);
+    setAdvice(null);
+    setError(e.message || "Failed to connect to backend.");
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
   return (
     <div className="sc-layout animate-fade-in">
@@ -78,13 +127,79 @@ export default function SupplierIntelligence({ onNavigate }) {
           </select>
         </div>
 
-        <div className="sc-input-group">
-          <label className="sc-label">Inventory State (Units)</label>
-          <div className="sc-select-grid">
-            <input type="number" value={inventory} onChange={e => setInventory(parseInt(e.target.value))} className="sc-input" style={{paddingLeft: '1rem'}} placeholder="Inventory" />
-            <input type="number" value={safetyStock} onChange={e => setSafetyStock(parseInt(e.target.value))} className="sc-input" style={{paddingLeft: '1rem'}} placeholder="Safety Target" />
-          </div>
-        </div>
+<div className="sc-input-group">
+  <label className="sc-label">Inventory State</label>
+
+  <div className="sc-select-grid">
+
+    <div>
+      <label
+        className="sc-label"
+        style={{
+          display: 'block',
+          marginBottom: '6px',
+          fontSize: '11px',
+          color: '#94a3b8'
+        }}
+      >
+        Current Inventory
+      </label>
+
+      <input
+        type="number"
+        value={inventory}
+        onChange={e => setInventory(e.target.value === '' ? 0 : Number(e.target.value))}
+        className="sc-input"
+        style={{ paddingLeft: '1rem' }}
+        placeholder="Current units"
+      />
+
+      <div
+        style={{
+          fontSize: '10px',
+          color: '#64748b',
+          marginTop: '5px'
+        }}
+      >
+        Units currently available
+      </div>
+    </div>
+
+    <div>
+      <label
+        className="sc-label"
+        style={{
+          display: 'block',
+          marginBottom: '6px',
+          fontSize: '11px',
+          color: '#94a3b8'
+        }}
+      >
+        Safety Stock Target
+      </label>
+
+      <input
+        type="number"
+        value={safetyStock}
+        onChange={e => setSafetyStock(e.target.value === '' ? 0 : Number(e.target.value))}
+        className="sc-input"
+        style={{ paddingLeft: '1rem' }}
+        placeholder="Safety target"
+      />
+
+      <div
+        style={{
+          fontSize: '10px',
+          color: '#64748b',
+          marginTop: '5px'
+        }}
+      >
+        Minimum buffer to maintain
+      </div>
+    </div>
+
+  </div>
+</div>
 
         <div className="sc-input-group">
           <label className="sc-label">Global Disruption</label>

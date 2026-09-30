@@ -147,20 +147,40 @@ class ContrastiveNLPEngine:
             self.warmup()
 
     def warmup(self):
-        if self._ready: return
+        if self._ready:
+            return
+
         print("[NLP ENGINE] Starting warmup...")
+
         try:
             from sentence_transformers import SentenceTransformer, util
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
+
+            # Automatically use GPU when available, otherwise CPU
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            print(f"[NLP ENGINE] Using device: {self.device}")
+
+            self.model = SentenceTransformer(
+                "all-MiniLM-L6-v2",
+                device=self.device
+            )
+
             self.util = util
+
             if os.path.exists(NLP_ANCHORS_PATH):
-                anchors = torch.load(NLP_ANCHORS_PATH)
-                self.disaster_matrix = anchors["disaster_matrix"]
-                self.safe_matrix = anchors["safe_matrix"]
+                anchors = torch.load(
+                    NLP_ANCHORS_PATH,
+                    map_location=torch.device(self.device)
+                )
+
+                self.disaster_matrix = anchors["disaster_matrix"].to(self.device)
+                self.safe_matrix = anchors["safe_matrix"].to(self.device)
+
                 self._ready = True
-                print(f"NLP Brain: Loaded Historical Anchor Matrix.")
+                print("NLP Brain: Loaded Historical Anchor Matrix.")
             else:
                 self._ready = False
+
         except Exception as e:
             print(f"[NLP ENGINE] Warmup failed: {e}")
             self._ready = False
